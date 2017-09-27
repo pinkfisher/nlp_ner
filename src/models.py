@@ -319,6 +319,7 @@ def extract_emission_experiments_features(sentence, word_index, tag, feature_ind
     curr_word = sentence.tokens[word_index].word
     # Lexical and POS features on this word, the previous, and the next (Word-1, Word0, Word1)
     word_context=[]
+    pos_context=[]
     for idx_offset in xrange(-2, 3):
         if word_index + idx_offset < 0:
             active_word = "<s>"
@@ -333,11 +334,16 @@ def extract_emission_experiments_features(sentence, word_index, tag, feature_ind
         else:
             active_pos = sentence.tokens[word_index + idx_offset].pos
         word_context.append(active_word)
+#         pos_context.append(active_pos)
         maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":Word" + repr(idx_offset) + "=" + active_word)
         maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":Pos" + repr(idx_offset) + "=" + active_pos)
+    
+#     maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":PosContext3=" + reduce(lambda x,y:x+","+y, pos_context[1:-1]))
+#     maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":PosContext5=" + reduce(lambda x,y:x+","+y, pos_context))
         
     maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":Context3=" + reduce(lambda x,y:x+","+y, word_context[1:-1]))
     maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":Context5=" + reduce(lambda x,y:x+","+y, word_context))
+#     maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":Context5=" + reduce(lambda x,y:x+","+y, word_context))
     
     # Character n-grams of the current word
     max_ngram_size = 3
@@ -372,10 +378,15 @@ def extract_emission_experiments_features(sentence, word_index, tag, feature_ind
                     new_word += "?"
         tri_word_shape.append(new_word)
         maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s" +repr(idx_offset) +"="+repr(new_word))
-    maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s-1s0="+repr(tri_word_shape[0:2]))
-    maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s0s1="+repr(tri_word_shape[1:3]))
-    maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s-1s0s1="+repr(tri_word_shape))
     
+    maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s-1s0="+repr(tri_word_shape[0:-1]))
+    maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s0s1="+repr(tri_word_shape[1:]))
+    
+#     maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s-2s-1s0="+repr(tri_word_shape[0:3]))
+#     maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s0s1s2="+repr(tri_word_shape[2:]))
+    
+    maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s-1s0s1="+repr(tri_word_shape))
+#     maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":WordShape_s-2s-1s0s1s2="+repr(tri_word_shape))
     
     
     return np.asarray(feats, dtype=int)

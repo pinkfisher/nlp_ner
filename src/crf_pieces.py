@@ -31,7 +31,7 @@ def crf_train_feature_generate(sentences):
         
     return [tag_indexer, feature_indexer, feature_cache]
 
-def crf_train_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epoch_count):
+def crf_train_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epoch_count, dev, step):
     start = timeit.default_timer()
     wt = np.ones(len(feature_indexer))
     for epoch in range(0,epoch_count):
@@ -82,6 +82,9 @@ def crf_train_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epo
                     f1 = feature_cache[sentence_idx][word_idx][t_idx]
                     
                     wt[f1] -=lr*np.exp(gamma[t_idx][word_idx])
+        if(epoch%step ==0):
+            dev_decoded = [crf_decode_piece(test_ex, tag_indexer, feature_indexer, wt) for test_ex in dev]
+            print_evaluation(dev, dev_decoded)
 
     stop = timeit.default_timer()
     print "total time:"+str(stop - start)       

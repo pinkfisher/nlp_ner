@@ -10,7 +10,7 @@ import crf_pieces as cp
 train = cp.read_data("./data/eng.train")
 dev = cp.read_data("./data/eng.testa")
 [tag_indexer, feature_indexer, feature_cache] = cp.crf_train_feature_generate(train)
-model = cp.crf_train_pieces(train, tag_indexer, feature_indexer, feature_cache,10)
+model = cp.crf_train_pieces(train, tag_indexer, feature_indexer, feature_cache,1)
 dev_decoded = [cp.crf_decode_piece(test_ex, model.tag_indexer, model.feature_indexer, model.feature_weights) for test_ex in dev]
 cp.print_evaluation(dev, dev_decoded)
 
@@ -37,3 +37,6 @@ file= open ("model1000.pickle","r")
 model1000_new = pickle.load(file) 
 dev_decoded1000_new = [cp.crf_decode_piece(test_ex, model1000_new.tag_indexer, model1000_new.feature_indexer, model1000_new.feature_weights) for test_ex in dev]
 cp.print_evaluation(dev, dev_decoded1000_new)
+
+
+
