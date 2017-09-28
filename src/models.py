@@ -314,7 +314,7 @@ def extract_emission_features(sentence, word_index, tag, feature_indexer, add_to
     
     return np.asarray(feats, dtype=int)
 
-def extract_emission_experiments_features(sentence, word_index, tag, feature_indexer, brown_clusters, add_to_indexer):
+def extract_emission_experiments_features(sentence, word_index, tag, feature_indexer, brown_clusters, clark_clusters, add_to_indexer):
     feats = []
     curr_word = sentence.tokens[word_index].word
     # Lexical and POS features on this word, the previous, and the next (Word-1, Word0, Word1)
@@ -393,5 +393,12 @@ def extract_emission_experiments_features(sentence, word_index, tag, feature_ind
     if brown_clusters.has_key(curr_word): b_cluster =brown_clusters[curr_word]
     
     maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":b_cluster="+b_cluster)
+    
+    c_cluster="-1"
+    curr_word = sentence.tokens[word_index].word.lower()
+    if clark_clusters.has_key(curr_word): c_cluster =clark_clusters[curr_word]
+    
+    maybe_add_feature(feats, feature_indexer, add_to_indexer, tag + ":c_cluster="+c_cluster)
+    
     
     return np.asarray(feats, dtype=int)

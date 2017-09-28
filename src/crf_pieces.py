@@ -14,7 +14,7 @@ from scipy import misc
 
 
 
-def crf_train_feature_generate(sentences, brown_clusters):
+def crf_train_feature_generate(sentences, brown_clusters, clark_clusters):
     tag_indexer = Indexer()
     for sentence in sentences:
         for tag in sentence.get_bio_tags():
@@ -28,12 +28,29 @@ def crf_train_feature_generate(sentences, brown_clusters):
             print "Ex " + repr(sentence_idx) + "/" + repr(len(sentences))
         for word_idx in xrange(0, len(sentences[sentence_idx])):
             for tag_idx in xrange(0, len(tag_indexer)):
-                feature_cache[sentence_idx][word_idx][tag_idx] = extract_emission_experiments_features(sentences[sentence_idx], word_idx, tag_indexer.get_object(tag_idx), feature_indexer, brown_clusters, add_to_indexer=True)
+                feature_cache[sentence_idx][word_idx][tag_idx] = extract_emission_experiments_features(sentences[sentence_idx], word_idx, tag_indexer.get_object(tag_idx), feature_indexer, brown_clusters, clark_clusters, add_to_indexer=True)
     
         
     return [tag_indexer, feature_indexer, feature_cache]
 
-def crf_train_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epoch_count, dev, step, brown_clusters):
+
+def crf_test_feature_generate(sentences, tag_indexer, feature_indexer, brown_clusters, clark_clusters):
+    
+    print "Extracting test features"
+    
+    # 4-d list indexed by sentence index, word index, tag index, feature index
+    feature_cache = [[[[] for k in xrange(0, len(tag_indexer))] for j in xrange(0, len(sentences[i]))] for i in xrange(0, len(sentences))]
+    for sentence_idx in xrange(0, len(sentences)):
+        if sentence_idx % 100 == 0:
+            print "Ex " + repr(sentence_idx) + "/" + repr(len(sentences))
+        for word_idx in xrange(0, len(sentences[sentence_idx])):
+            for tag_idx in xrange(0, len(tag_indexer)):
+                feature_cache[sentence_idx][word_idx][tag_idx] = extract_emission_experiments_features(sentences[sentence_idx], word_idx, tag_indexer.get_object(tag_idx), feature_indexer, brown_clusters, clark_clusters, add_to_indexer=False)
+    
+        
+    return [feature_cache]
+
+def crf_train_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epoch_count, dev, step, brown_clusters, clark_clusters, dev_feature_cache=-1):
     start = timeit.default_timer()
     wt = np.ones(len(feature_indexer))
     for epoch in range(0,epoch_count):
@@ -85,12 +102,64 @@ def crf_train_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epo
                     
                     wt[f1] -=lr*np.exp(gamma[t_idx][word_idx])
         if(epoch%step ==0):
-            dev_decoded = [crf_decode_piece(test_ex, tag_indexer, feature_indexer, wt, brown_clusters) for test_ex in dev]
+            dev_decoded = [crf_decode_piece(dev[i], tag_indexer, feature_indexer, wt, brown_clusters, clark_clusters, dev_feature_cache[i]) for i in xrange(len(dev))]
             print_evaluation(dev, dev_decoded)
 
     stop = timeit.default_timer()
     print "total time:"+str(stop - start)       
     return CrfNerModel(tag_indexer, feature_indexer, wt)
+
+
+def crf_decode_piece(sentence, tag_indexer, feature_indexer, feature_weights, brown_clusters, clark_clusters, feature_cache=-1):
+    
+    
+    w_num=len(sentence)
+    t_num=len(tag_indexer)
+    psi=np.zeros([t_num,w_num])
+    if feature_cache==-1:
+        feature_cache = [[[] for k in xrange(0, len(tag_indexer))] for j in xrange(0, len(sentence))]
+        for word_idx in xrange(0, len(sentence)):
+            for tag_idx in xrange(0, len(tag_indexer)):
+                feature_cache[word_idx][tag_idx] = extract_emission_experiments_features(sentence, word_idx, tag_indexer.get_object(tag_idx), feature_indexer, brown_clusters, clark_clusters, add_to_indexer=False)
+                
+    for i in range(0,t_num):
+        for j in range(0,w_num):
+            psi[i][j]=feature_weights[feature_cache[j][i]].sum()
+    
+    score = np.ones([t_num,w_num])*(-1*np.inf)
+    back_tracking = np.ones([t_num,w_num])*(-1)
+    
+
+    for i in range(t_num):
+        if isI(tag_indexer.get_object(i)) ==False : score[i,0] = psi[i,0]
+    
+    for i in range(1,w_num):
+        for j in range(t_num):
+            if not isI(tag_indexer.get_object(j)): 
+                back_tracking[j,i] = score[:,i-1].argmax()
+                score[j,i] = score[:,i-1].max()+psi[j,i]
+            else:
+                valid_idx = [tag_indexer.get_index("B-"+get_tag_label(tag_indexer.get_object(j))),j] 
+                score[j,i] = score[valid_idx,i-1].max()+psi[j,i]
+                arg_max = score[valid_idx,i-1].argmax()
+                back_tracking[j,i] = valid_idx[arg_max]
+    
+    
+    
+    pred_idx=np.zeros(w_num,dtype='Int32')
+    
+    pred_idx[-1] = score[:,-1].argmax()
+    for i in range(w_num-2,-1,-1):
+        pred_idx[i] = back_tracking[pred_idx[i+1],i+1]
+    
+    pred_tags = [tag_indexer.get_object(i) for i in pred_idx]
+    return LabeledSentence(sentence.tokens, chunks_from_bio_tag_seq(pred_tags))
+
+
+############################################################
+
+############################################################
+
 
 def crf_train_trans_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epoch_count):
     start = timeit.default_timer()
@@ -170,50 +239,6 @@ def crf_train_trans_pieces(sentences, tag_indexer, feature_indexer, feature_cach
     stop = timeit.default_timer()
     print "total time:"+str(stop - start)       
     return CrfNerModelTrans(tag_indexer, feature_indexer, wt, wt_t)
-
-def crf_decode_piece(sentence, tag_indexer, feature_indexer, feature_weights, brown_clusters):
-    
-    
-    w_num=len(sentence)
-    t_num=len(tag_indexer)
-    psi=np.zeros([t_num,w_num])
-    feature_cache = [[[] for k in xrange(0, len(tag_indexer))] for j in xrange(0, len(sentence))]
-    for word_idx in xrange(0, len(sentence)):
-        for tag_idx in xrange(0, len(tag_indexer)):
-            feature_cache[word_idx][tag_idx] = extract_emission_experiments_features(sentence, word_idx, tag_indexer.get_object(tag_idx), feature_indexer, brown_clusters, add_to_indexer=False)
-            
-    for i in range(0,t_num):
-        for j in range(0,w_num):
-            psi[i][j]=feature_weights[feature_cache[j][i]].sum()
-    
-    score = np.ones([t_num,w_num])*(-1*np.inf)
-    back_tracking = np.ones([t_num,w_num])*(-1)
-    
-
-    for i in range(t_num):
-        if isI(tag_indexer.get_object(i)) ==False : score[i,0] = psi[i,0]
-    
-    for i in range(1,w_num):
-        for j in range(t_num):
-            if not isI(tag_indexer.get_object(j)): 
-                back_tracking[j,i] = score[:,i-1].argmax()
-                score[j,i] = score[:,i-1].max()+psi[j,i]
-            else:
-                valid_idx = [tag_indexer.get_index("B-"+get_tag_label(tag_indexer.get_object(j))),j] 
-                score[j,i] = score[valid_idx,i-1].max()+psi[j,i]
-                arg_max = score[valid_idx,i-1].argmax()
-                back_tracking[j,i] = valid_idx[arg_max]
-    
-    
-    
-    pred_idx=np.zeros(w_num,dtype='Int32')
-    
-    pred_idx[-1] = score[:,-1].argmax()
-    for i in range(w_num-2,-1,-1):
-        pred_idx[i] = back_tracking[pred_idx[i+1],i+1]
-    
-    pred_tags = [tag_indexer.get_object(i) for i in pred_idx]
-    return LabeledSentence(sentence.tokens, chunks_from_bio_tag_seq(pred_tags))
 
 
 def crf_decode_piece_old(sentence, tag_indexer, feature_indexer, feature_weights):
