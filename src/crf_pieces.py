@@ -7,12 +7,14 @@ from nerdata import *
 from utils import *
 from models import *
 import timeit
+import re
 
 import numpy as np
 from scipy import misc
 
 
-def crf_train_feature_generate(sentences):
+
+def crf_train_feature_generate(sentences, brown_clusters):
     tag_indexer = Indexer()
     for sentence in sentences:
         for tag in sentence.get_bio_tags():
@@ -26,12 +28,12 @@ def crf_train_feature_generate(sentences):
             print "Ex " + repr(sentence_idx) + "/" + repr(len(sentences))
         for word_idx in xrange(0, len(sentences[sentence_idx])):
             for tag_idx in xrange(0, len(tag_indexer)):
-                feature_cache[sentence_idx][word_idx][tag_idx] = extract_emission_experiments_features(sentences[sentence_idx], word_idx, tag_indexer.get_object(tag_idx), feature_indexer, add_to_indexer=True)
+                feature_cache[sentence_idx][word_idx][tag_idx] = extract_emission_experiments_features(sentences[sentence_idx], word_idx, tag_indexer.get_object(tag_idx), feature_indexer, brown_clusters, add_to_indexer=True)
     
         
     return [tag_indexer, feature_indexer, feature_cache]
 
-def crf_train_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epoch_count, dev, step):
+def crf_train_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epoch_count, dev, step, brown_clusters):
     start = timeit.default_timer()
     wt = np.ones(len(feature_indexer))
     for epoch in range(0,epoch_count):
@@ -83,7 +85,7 @@ def crf_train_pieces(sentences, tag_indexer, feature_indexer, feature_cache, epo
                     
                     wt[f1] -=lr*np.exp(gamma[t_idx][word_idx])
         if(epoch%step ==0):
-            dev_decoded = [crf_decode_piece(test_ex, tag_indexer, feature_indexer, wt) for test_ex in dev]
+            dev_decoded = [crf_decode_piece(test_ex, tag_indexer, feature_indexer, wt, brown_clusters) for test_ex in dev]
             print_evaluation(dev, dev_decoded)
 
     stop = timeit.default_timer()
@@ -169,7 +171,7 @@ def crf_train_trans_pieces(sentences, tag_indexer, feature_indexer, feature_cach
     print "total time:"+str(stop - start)       
     return CrfNerModelTrans(tag_indexer, feature_indexer, wt, wt_t)
 
-def crf_decode_piece(sentence, tag_indexer, feature_indexer, feature_weights):
+def crf_decode_piece(sentence, tag_indexer, feature_indexer, feature_weights, brown_clusters):
     
     
     w_num=len(sentence)
@@ -178,7 +180,7 @@ def crf_decode_piece(sentence, tag_indexer, feature_indexer, feature_weights):
     feature_cache = [[[] for k in xrange(0, len(tag_indexer))] for j in xrange(0, len(sentence))]
     for word_idx in xrange(0, len(sentence)):
         for tag_idx in xrange(0, len(tag_indexer)):
-            feature_cache[word_idx][tag_idx] = extract_emission_experiments_features(sentence, word_idx, tag_indexer.get_object(tag_idx), feature_indexer, add_to_indexer=False)
+            feature_cache[word_idx][tag_idx] = extract_emission_experiments_features(sentence, word_idx, tag_indexer.get_object(tag_idx), feature_indexer, brown_clusters, add_to_indexer=False)
             
     for i in range(0,t_num):
         for j in range(0,w_num):
@@ -212,6 +214,7 @@ def crf_decode_piece(sentence, tag_indexer, feature_indexer, feature_weights):
     
     pred_tags = [tag_indexer.get_object(i) for i in pred_idx]
     return LabeledSentence(sentence.tokens, chunks_from_bio_tag_seq(pred_tags))
+
 
 def crf_decode_piece_old(sentence, tag_indexer, feature_indexer, feature_weights):
     
@@ -284,3 +287,17 @@ def crf_decode_trans_piece(sentence, tag_indexer, feature_indexer, feature_weigh
     
     pred_tags = [tag_indexer.get_object(i) for i in pred_idx]
     return LabeledSentence(sentence.tokens, chunks_from_bio_tag_seq(pred_tags))
+
+
+
+def create_text_file(sentences,file_name):
+    file = open(file_name,"w")
+    for sentence in sentences:
+        for token in sentence.tokens:
+            word = token.word
+            word = re.sub(r'[^\w\s]','',word)
+            if(len(word)>0):
+                file.write(word)
+                file.write(" ")
+        file.write("\n")
+    
