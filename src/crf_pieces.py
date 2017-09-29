@@ -135,7 +135,9 @@ def crf_decode_piece(sentence, tag_indexer, feature_indexer, feature_weights, br
     
     for i in range(1,w_num):
         for j in range(t_num):
+#             REPORT1
             if not isI(tag_indexer.get_object(j)): 
+#             if True:
                 back_tracking[j,i] = score[:,i-1].argmax()
                 score[j,i] = score[:,i-1].max()+psi[j,i]
             else:
